@@ -3,7 +3,9 @@ import random
 import time
 import uuid
 
-from smart_object_resource import SmartObjectResource
+import json
+
+from mqtt.resource.smart_object_resource import SmartObjectResource
 
 RESOURCE_TYPE = "iot:sensor:waterflow"
 
@@ -20,18 +22,18 @@ class WaterSensorResource(SmartObjectResource):
         super().__init__(uuid.uuid4(), RESOURCE_TYPE)
         self.timestamp = int(time.time())
         self.water_level = MIN_WATER_FLOW + random.uniform(MIN_WATER_FLOW, MAX_WATER_FLOW) * random.uniform(0, 1)
-        self.start_periodic_event_value_update_task()
+        # self.start_periodic_event_value_update_task()
 
     async def update_water_level(self):
         self.water_level = self.water_level - (MIN_INCREASE + MAX_INCREASE * random.uniform(0, 1))
-        await self.notify_update(self.water_level)
+        await self.notify_update(self.type, self.water_level)
         await asyncio.sleep(TASK_DELAY)
         # TODO check if value < 0
 
     def start_periodic_event_value_update_task(self):
         try:
             print(f"Starting periodic Update Task with period {UPDATE_DELAY}s")
-            self.add_data_listener(print_water_level)
+            # self.add_data_listener(print_water_level)
             time.sleep(TASK_DELAY)
             while True:
                 task = asyncio.get_event_loop().create_task(self.update_water_level())
@@ -43,8 +45,8 @@ class WaterSensorResource(SmartObjectResource):
 def print_water_level(water_level):
     print(f"New Water Level: {water_level} l/s")
 
-def main():
-    w = WaterSensorResource()
-
-if __name__ == '__main__':
-    main()
+# def main():
+#     w = WaterSensorResource()
+#
+# if __name__ == '__main__':
+#     main()
