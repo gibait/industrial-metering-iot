@@ -1,7 +1,5 @@
 import uuid
 
-import json
-
 from mqtt.resource.smart_object_resource import SmartObjectResource
 
 RESOURCE_TYPE = "iot:actuator:generic"
