@@ -5,4 +5,4 @@ class MqttConfigurationParams(object):
     MQTT_DEFAULT_TOPIC = "metering"
     WATER_DEVICE_TOPIC = "water/device"
     TELEMETRY_TOPIC = "telemetry"
-    COMMAND_TOPIC = "command"
+    CONTROL_TOPIC = "control"
