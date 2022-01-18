@@ -2,8 +2,6 @@ import uuid
 
 from mqtt.resource.smart_object_resource import SmartObjectResource
 
-TASK_DELAY = 2 #seconds
-UPDATE_DELAY = 3 #seconds
 
 class GenericActuatorResource(SmartObjectResource):
 
