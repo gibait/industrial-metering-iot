@@ -1,5 +1,4 @@
-import asyncio
-import uuid
+import logging
 
 from mqtt.resource.resource_data_listener import Event
 
@@ -13,7 +12,7 @@ class SmartObjectResource:
         if self.resource_data_listener:
             self.resource_data_listener(type, updated_value)
         else:
-            print("No one is listening ...")
+            logging.info("No one is listening ...")
 
     def add_data_listener(self, listener_to_add):
         self.resource_data_listener.append(listener_to_add)

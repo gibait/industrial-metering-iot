@@ -1,6 +1,7 @@
 import json
 import time
 import uuid
+import logging
 from threading import Timer
 
 import paho.mqtt.client as mqtt
@@ -10,11 +11,13 @@ from mqtt.message.control_message import ControlMessage
 from mqtt.resource.water_sensor_resource import WaterSensorResource
 from mqtt.resource.generic_actuator_resource import GenericActuatorResource
 
-
-SUPPLY_THRESHOLD = 2.0
-RESTART_DELAY = 10 #s
+logging.basicConfig(level=logging.DEBUG,
+                    format="%(asctime)s %(levelname)-8s %(message)s")
 
 class WaterFlowConsumer:
+
+    SUPPLY_THRESHOLD = 2.0
+    RESTART_DELAY = 10  # s
 
     is_alarm_notified = False
 
@@ -31,32 +34,32 @@ class WaterFlowConsumer:
     def on_connect(self, client, userdata, flags, rc):
         try:
             if str(rc) == 0:
-                print("Connected successfully")
+                logging.info("Connected successfully")
             device_telemetry_topic = "{0}/{1}/+/{2}".format(
                 mqttParams.MQTT_DEFAULT_TOPIC,
                 mqttParams.WATER_DEVICE_TOPIC,
                 mqttParams.TELEMETRY_TOPIC
             )
             self.mqtt_client.subscribe(device_telemetry_topic)
-            print("Subscribed to: " + device_telemetry_topic)
+            logging.info("Subscribed to: " + device_telemetry_topic)
         except Exception as e:
-            print("Error! Could not establish connection")
-            print(e)
+            logging.error("Error! Could not establish connection")
+            logging.error(e)
 
     def on_message(self, client, userdata, message):
         try:
             telemetry_message:TelemetryMessage = self.parse_telemetry_message(message)
             if telemetry_message.type == WaterSensorResource.RESOURCE_TYPE:
                 water_flow_level = telemetry_message.value
-                print(f"New Water Flow Level received! Water flow level: {water_flow_level}")
+                logging.info(f"New Water Flow Level received! Water flow level: {water_flow_level}")
 
                 if message.topic not in self.waterflow_history:
-                    print(f"New Water flow level saved for {message.topic}")
+                    logging.info(f"New Water flow level saved for {message.topic}")
                     self.waterflow_history[message.topic] = water_flow_level
                     self.is_alarm_notified = False
                 else:
                     if self.is_water_level_alarm(self.waterflow_history.get(message.topic), water_flow_level) and not self.is_alarm_notified:
-                        print("WATER SUPPLY THRESHOLD LEVEL REACHED! Sending control notification ...")
+                        logging.info("WATER SUPPLY THRESHOLD LEVEL REACHED! Sending control notification ...")
                         self.is_alarm_notified = True
 
                         # topic string manipulation by adding control to it
@@ -69,25 +72,25 @@ class WaterFlowConsumer:
                         self.waterflow_history = {}
 
                         # TODO sleep and resend control message
-                        t = Timer(RESTART_DELAY, self.delay_control_message, [control_topic])
+                        t = Timer(self.RESTART_DELAY, self.delay_control_message, [control_topic])
                         t.start()
 
             if telemetry_message.type == GenericActuatorResource.RESOURCE_TYPE:
                 actuator_status = telemetry_message.value
-                print(f"Supply switched {'on' if actuator_status else 'off'}")
+                logging.info(f"Supply switched {'on' if actuator_status else 'off'}")
 
         except Exception as e:
-            print("Error! Could not create message")
-            print(e)
+            logging.error("Error! Could not create message")
+            logging.error(e)
 
     def delay_control_message(self, topic):
         self.publish_control_message(topic, ControlMessage('alert', {WaterSensorResource.RESOURCE_TYPE: "resume_operation"}))
 
     def is_delay_over(self, suspend_starting_time):
-        return int(time.time()) - suspend_starting_time >= RESTART_DELAY
+        return int(time.time()) - suspend_starting_time >= self.RESTART_DELAY
 
     def is_water_level_alarm(self, last_water_level, new_water_level):
-        return new_water_level - last_water_level >= SUPPLY_THRESHOLD
+        return new_water_level - last_water_level >= self.SUPPLY_THRESHOLD
 
     def parse_telemetry_message(self, mqtt_message:mqtt.MQTTMessage):
         try:
@@ -96,20 +99,20 @@ class WaterFlowConsumer:
                 # Crafting Telemetry message for better parsing
                 return TelemetryMessage(**payload)
         except Exception as e:
-            print("Error! Cannot parse message")
-            print(e)
+            logging.error("Error! Cannot parse message")
+            logging.error(e)
 
     def publish_control_message(self, topic:str, message:ControlMessage):
         # TODO add is connected check
         if topic and message:
             try:
                 self.mqtt_client.publish(topic, message.to_json())
-                print(f"Data {message.to_json()} successfully published to {topic}")
+                logging.info(f"Data {message.to_json()} successfully published to {topic}")
             except Exception as e:
-                print("Error! Could not publish message")
-                print(e)
+                logging.error("Error! Could not publish message")
+                logging.error(e)
         else:
-            print("Error! msg != None or topic != None or mqttClient not connected")
+            logging.info("Error! msg != None or topic != None or mqttClient not connected")
 
 def main():
     WaterFlowConsumer()
