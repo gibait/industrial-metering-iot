@@ -16,7 +16,7 @@ class GasSensorResource(SmartObjectResource):
     MAX_INCREASE = 0.5
     MIN_INCREASE = 0.1
     TASK_DELAY = 2  # seconds
-    UPDATE_DELAY = 3  # seconds
+    UPDATE_DELAY = 5  # seconds
 
     def __init__(self):
         super().__init__(uuid.uuid4(), self.RESOURCE_TYPE)

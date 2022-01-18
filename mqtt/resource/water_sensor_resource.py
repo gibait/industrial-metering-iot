@@ -16,7 +16,7 @@ class WaterSensorResource(SmartObjectResource):
     MAX_INCREASE = 1.0
     MIN_INCREASE = 0.1
     TASK_DELAY = 2  # seconds
-    UPDATE_DELAY = 3  # seconds
+    UPDATE_DELAY = 5  # seconds
 
     def __init__(self):
         super().__init__(uuid.uuid4(), self.RESOURCE_TYPE)
@@ -39,7 +39,7 @@ class WaterSensorResource(SmartObjectResource):
                 if self.is_active:
                     await self.update_water_level()
                 else:
-                    logging.info(f"Gas supply monitored by device {self.id} is switched OFF")
+                    logging.info(f"Water supply monitored by device {self.id} is switched OFF")
         except Exception as e:
             logging.error("Error starting periodic event value update!")
             logging.error(e)
