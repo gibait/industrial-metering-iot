@@ -21,6 +21,7 @@ class MeteringSmartObject:
 
     def __init__(self, resources_dict, type):
         self.device_id = uuid.uuid4()
+        # Using async-mqtt wrapper for complete async compatibility
         self.mqtt_client = Client(
             hostname=mqttParams.BROKER_ADDRESS,
             port=mqttParams.BROKER_PORT,
@@ -94,20 +95,17 @@ class MeteringSmartObject:
 
     def stop(self):
         # TODO add coherent stop method
-        """
+        '''
         - deregister to data listener
         - cancel task
         - stop loop
-        """
+        '''
 
     async def register_to_available_resources(self):
         try:
             for resource in self.resources_dict:
                 # TODO add actuator status check before starting periodic update
-                if isinstance(self.resources_dict[resource], GasSensorResource) \
-                        or isinstance(self.resources_dict[resource], WaterSensorResource) \
-                        or isinstance(self.resources_dict[resource], GenericActuatorResource):
-
+                if isinstance(self.resources_dict[resource], GasSensorResource) or isinstance(self.resources_dict[resource], WaterSensorResource) or isinstance(self.resources_dict[resource], GenericActuatorResource):
                     logging.info(f"Registering to Resource {self.resources_dict[resource].type} (id: {self.resources_dict[resource].id}) notifications")
                     # Registering to data listener for both actuator and sensor
                     self.resources_dict[resource].add_data_listener(self.on_data_changed)
@@ -117,7 +115,7 @@ class MeteringSmartObject:
 
                     # Starting periodic event value update for emulating purposes
                     if resource == "sensor":
-                        await self.resources_dict[resource].start_periodic_event_value_update_task()
+                        asyncio.get_event_loop().create_task(self.resources_dict[resource].start_periodic_event_value_update_task())
 
         except Exception as e:
             logging.error("Error Registering to resources! ")
