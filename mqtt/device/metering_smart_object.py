@@ -8,6 +8,7 @@ from asyncio_mqtt import Client
 
 from mqtt.resource.gas_sensor_resource import GasSensorResource
 from mqtt.resource.water_sensor_resource import WaterSensorResource
+from mqtt.resource.electricity_sensor_resource import ElectricitySensorResource
 from mqtt.resource.generic_actuator_resource import GenericActuatorResource
 from mqtt.message.telemetry_message import TelemetryMessage
 from mqtt.message.control_message import ControlMessage
@@ -18,6 +19,14 @@ logging.basicConfig(level=logging.DEBUG,
                     format="%(asctime)s %(levelname)-8s %(message)s")
 
 class MeteringSmartObject:
+    """
+    Core of smart object emulation
+    Handle all three resources type
+    Subscribes to devices control topic
+    When receives an alert it switches actuator's device status
+    When data listener send a notify_update it publishes a telemetry message
+    Is started by an async start function
+    """
 
     def __init__(self, resources_dict, type):
         self.device_id = uuid.uuid4()
@@ -34,6 +43,10 @@ class MeteringSmartObject:
         logging.info(f"{self.type} Metering Smart Object successfully created !")
 
     async def subscribe_to_control_topic(self):
+        """
+        Subscribe to every device's control topic available
+        /metering/[resource]/device/[unique_id]/(control)
+        """
         try:
             device_telemetry_topic = "{0}/{1}/{2}/{3}/{4}".format(
                 mqttParams.MQTT_DEFAULT_TOPIC,
@@ -49,6 +62,9 @@ class MeteringSmartObject:
             logging.error(e)
 
     async def on_connect(self):
+        """
+        Connect to mqtt broker
+        """
         try:
             await self.mqtt_client.connect()
             logging.info(f"Device {self.device_id} successfully connected to MQTT Broker")
@@ -57,6 +73,12 @@ class MeteringSmartObject:
             logging.error(e)
 
     async def on_message(self):
+        """
+        Iterative async function
+        When a message is received it parses it
+        only checks if type == 'alert'
+        discards metadata
+        """
         try:
             async with self.mqtt_client.filtered_messages('#') as messages:
                 async for message in messages:
@@ -69,6 +91,11 @@ class MeteringSmartObject:
             logging.error(e)
 
     def parse_control_message(self, mqtt_message: mqtt.MQTTMessage):
+        """
+        Build ControlMessage from json payload
+        :param mqtt_message:
+        :return: ControlMessage
+        """
         try:
             if isinstance(mqtt_message, mqtt.MQTTMessage):
                 payload = json.loads(mqtt_message.payload.decode("utf-8"))
@@ -79,6 +106,10 @@ class MeteringSmartObject:
             logging.error(e)
 
     async def start(self):
+        """
+        Starts smart object emulation
+        :return:
+        """
         try:
             if self.device_id and len(self.resources_dict.keys()) > 0:
                 logging.info(f"Starting {self.type} Metering Emulator ...")
@@ -102,10 +133,18 @@ class MeteringSmartObject:
         '''
 
     async def register_to_available_resources(self):
+        """
+        Most important piece of the puzzle
+        - It checks if resources given are allowed
+        - It registers to resources data listener
+        - It registers sensor to actuator data listener
+        - It creates periodic event value update task
+        :return:
+        """
         try:
             for resource in self.resources_dict:
                 # TODO add actuator status check before starting periodic update
-                if isinstance(self.resources_dict[resource], GasSensorResource) or isinstance(self.resources_dict[resource], WaterSensorResource) or isinstance(self.resources_dict[resource], GenericActuatorResource):
+                if isinstance(self.resources_dict[resource], (GasSensorResource, WaterSensorResource, ElectricitySensorResource, GenericActuatorResource)):
                     logging.info(f"Registering to Resource {self.resources_dict[resource].type} (id: {self.resources_dict[resource].id}) notifications")
                     # Registering to data listener for both actuator and sensor
                     self.resources_dict[resource].add_data_listener(self.on_data_changed)
@@ -121,9 +160,21 @@ class MeteringSmartObject:
             logging.error("Error Registering to resources! ")
             logging.error(e)
 
-    def on_data_changed(self, type, updated_value):
+    def on_data_changed(self, updated_value, **kwargs):
+        """
+        When a sensor/actuator changes value/state
+        a TelemetryMessage is composed looking for
+        a needed param and some optional but always given params
+        Creates task to publish data
+        :param updated_value:
+        :param kwargs: type
+        :param kwargs: unit
+        :return:
+        """
         try:
-            message = TelemetryMessage(type, updated_value)
+            type = kwargs.get('type', None)
+            unit = kwargs.get('unit', None)
+            message = TelemetryMessage(type=type, value=updated_value, unit=unit).build_senml_json_payload()
             asyncio.get_event_loop().create_task(self.publish_telemetry_data(
                 topic=f"{mqttParams.MQTT_DEFAULT_TOPIC}/{self.type}/{mqttParams.DEVICE_TOPIC}/{self.device_id}/{mqttParams.TELEMETRY_TOPIC}",
                 message=message
@@ -133,11 +184,17 @@ class MeteringSmartObject:
             logging.error(e)
 
     async def publish_telemetry_data(self, topic, message):
+        """
+        Publish given message on given topic
+        :param topic:
+        :param message:
+        :return:
+        """
         # TODO add is connected check
         if topic and message:
             try:
-                await self.mqtt_client.publish(topic, message.to_json())
-                logging.info(f"Data {message.to_json()} successfully published to {topic}")
+                await self.mqtt_client.publish(topic, message)
+                logging.info(f"Data {message} successfully published to {topic}")
             except Exception as e:
                 logging.error("Error! Could not publish data")
                 logging.error(e)
