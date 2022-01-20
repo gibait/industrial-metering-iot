@@ -15,7 +15,7 @@ from mqtt.resource.electricity_sensor_resource import ElectricitySensorResource
 logging.basicConfig(level=logging.DEBUG,
                     format="%(asctime)s %(levelname)-8s %(message)s")
 
-class GenericResourceConsumer:
+class PolicyManager:
     """
     Generic Resource Consumer class handling every kind of resource
     Load threshold data from a file
@@ -191,7 +191,7 @@ class GenericResourceConsumer:
             logging.error(e)
 
 def main():
-    asyncio.get_event_loop().create_task(GenericResourceConsumer().start())
+    asyncio.get_event_loop().create_task(PolicyManager().start())
     asyncio.get_event_loop().run_forever()
 
 if __name__ == '__main__':
