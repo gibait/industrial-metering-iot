@@ -13,4 +13,4 @@ class GenericActuatorResource(SmartObjectResource):
 
     async def switch_actuator_status(self):
         self.value = not self.value
-        await self.notify_update(self.type, self.value)
+        await self.notify_update(self.value, type=self.type, unit=None)
