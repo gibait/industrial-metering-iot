@@ -5,6 +5,7 @@ import asyncio
 from mqtt.device.metering_smart_object import MeteringSmartObject
 from mqtt.resource.water_sensor_resource import WaterSensorResource
 from mqtt.resource.gas_sensor_resource import GasSensorResource
+from mqtt.resource.electricity_sensor_resource import ElectricitySensorResource
 from mqtt.resource.generic_actuator_resource import GenericActuatorResource
 
 logging.basicConfig(level=logging.DEBUG,
@@ -26,6 +27,12 @@ class MeteringSmartObjectProcess:
                 "actuator": GenericActuatorResource()
             }, "gas")
             asyncio.get_event_loop().create_task(gas_metering_smart_object.start())
+
+            electricity_metering_smart_object = MeteringSmartObject({
+                "sensor": ElectricitySensorResource(),
+                "actuator": GenericActuatorResource()
+            }, "electricity")
+            asyncio.get_event_loop().create_task(electricity_metering_smart_object.start())
 
             asyncio.get_event_loop().run_forever()
 
