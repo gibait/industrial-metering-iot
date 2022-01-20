@@ -1,0 +1,14 @@
+{
+  "iot:sensor:water": {
+    "SUPPLY_THRESHOLD": 4,
+    "RESTART_DELAY": 10
+  },
+  "iot:sensor:gas": {
+    "SUPPLY_THRESHOLD": 3,
+    "RESTART_DELAY": 7
+  },
+  "iot:sensor:electricity": {
+    "SUPPLY_THRESHOLD": 3,
+    "RESTART_DELAY": 10
+  }
+}
