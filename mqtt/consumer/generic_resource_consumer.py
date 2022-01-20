@@ -4,26 +4,27 @@ import uuid
 import logging
 import paho.mqtt.client as mqtt
 
-from asyncio_mqtt import Client
+from asyncio_mqtt import Client, MqttError
 from mqtt.conf.mqtt_conf_params import MqttConfigurationParams as mqttParams
 from mqtt.message.telemetry_message import TelemetryMessage
 from mqtt.message.control_message import ControlMessage
 from mqtt.resource.water_sensor_resource import WaterSensorResource
 from mqtt.resource.gas_sensor_resource import GasSensorResource
+from mqtt.resource.electricity_sensor_resource import ElectricitySensorResource
 
 logging.basicConfig(level=logging.DEBUG,
                     format="%(asctime)s %(levelname)-8s %(message)s")
 
 class GenericResourceConsumer:
     """
-        Generic Resource Consumer class handling every kind of resource
-        Load threshold data from a file
-        Is started by an async start function
-        Uses logging
+    Generic Resource Consumer class handling every kind of resource
+    Load threshold data from a file
+    Is started by an async start function
+    Uses logging
     """
 
     # Load delay times from json config file
-    with open('../conf/config_values.json') as json_file:
+    with open('../conf/policy_manager_params.json') as json_file:
         config_values = json.load(json_file)
 
     is_resource_threshold_notified = {}
@@ -42,19 +43,18 @@ class GenericResourceConsumer:
 
     async def on_connect(self):
         """
-            Connect to mqtt broker
+        Connect to mqtt broker
         """
         try:
             await self.mqtt_client.connect()
             logging.info(f"Consumer {self.id} successfully connected to MQTT Broker")
-        except Exception as e:
+        except MqttError:
             logging.error("Error establishing connection!")
-            logging.error(e)
 
     async def subscribe_to_telemetry_topic(self):
         """
-            Subscribe to every telemetry topic available using mqtt wildcards
-            /metering/[resource]/device/[unique_id]/(control)(telemetry)
+        Subscribe to every telemetry topic available using mqtt wildcards
+        /metering/[resource]/device/[unique_id]/(control)(telemetry)
         """
         try:
             # Subscribe to all telemetry topic available
@@ -72,11 +72,11 @@ class GenericResourceConsumer:
 
     async def on_message(self):
         """
-            Iterative core function of the program
-            Compose TelemetryMessage and checks if allowed type
-            Store new values for threshold checks
-            Delay resume control message when threshold is reached
-            Completely asynchronous
+        Iterative core function of the program
+        Compose TelemetryMessage and checks if allowed type
+        Store new values for threshold checks
+        Delay resume control message when threshold is reached
+        Completely asynchronous
         """
         try:
             # Iterate through messages
@@ -85,7 +85,7 @@ class GenericResourceConsumer:
                     # Craft Telemetry message
                     telemetry_message:TelemetryMessage = self.parse_telemetry_message(message)
                     # Check for the resource type
-                    if telemetry_message.type == WaterSensorResource.RESOURCE_TYPE or telemetry_message.type == GasSensorResource.RESOURCE_TYPE:
+                    if telemetry_message.type in (WaterSensorResource.RESOURCE_TYPE, GasSensorResource.RESOURCE_TYPE, ElectricitySensorResource.RESOURCE_TYPE):
                         new_level = telemetry_message.value
                         logging.info(f"Detected new value: {new_level} in topic {message.topic}")
 
@@ -96,7 +96,7 @@ class GenericResourceConsumer:
                             self.is_resource_threshold_notified[message.topic] = False
                         else:
                             if self.is_level_threshold(self.resource_value_history.get(message.topic), new_level, telemetry_message.type) and not self.is_resource_threshold_notified[message.topic]:
-                                logging.info(f"{message.topic} THRESHOLD LEVEL REACHED! Sending control notification ...")
+                                logging.info(f"THRESHOLD LEVEL REACHED! Sending control notification on {message.topic}")
                                 # Resource is now notified
                                 self.is_resource_threshold_notified[message.topic] = True
 
@@ -118,7 +118,9 @@ class GenericResourceConsumer:
 
     def refactor_telemetry_topic_to_control(self, message):
         """
-            Strip telemetry from topic and append control
+        Strip telemetry from topic string and append control
+        :param message:str
+        :return control_topic:str
         """
         try:
             topic = message.topic.split('/')[:-1]
@@ -131,11 +133,14 @@ class GenericResourceConsumer:
 
     async def delay_control_message(self, delay, topic):
         """
-            Await given time and publish a resume control message
+        Await given time and publish a resume control message
+        :param delay:float
+        :param topic:str
+        :return None
         """
         try:
             await asyncio.sleep(delay)
-            logging.info(f"{topic} DELAY IS OVER, sending resume control notification")
+            logging.info(f"DELAY IS OVER, sending resume control on {topic}")
             await self.publish_control_message(topic, ControlMessage('alert', {topic: "resume_operation"}))
         except Exception as e:
             logging.error("Error delaying resume control message")
@@ -146,20 +151,23 @@ class GenericResourceConsumer:
 
     def parse_telemetry_message(self, mqtt_message:mqtt.MQTTMessage):
         """
-            Compose TelemetryMessage using mqtt message
+        Compose TelemetryMessage using mqtt message json payload
+        :param mqtt_message: json payload received
+        :return TelemetryMessage: built from payload
         """
         try:
             if isinstance(mqtt_message, mqtt.MQTTMessage):
-                payload = json.loads(mqtt_message.payload.decode("utf-8"))
-                # Crafting Telemetry message for better parsing
-                return TelemetryMessage(**payload)
+                return TelemetryMessage().build_class_from_senml_json(mqtt_message.payload)
         except Exception as e:
             logging.error("Error! Cannot parse message")
             logging.error(e)
 
     async def publish_control_message(self, topic:str, message:ControlMessage):
         """
-            Publish control message to control topic
+        Publish control message to control topic
+        :param topic:str
+        :param message:ControlMessage
+        :return None
         """
         # TODO add is connected check
         if topic and message:
