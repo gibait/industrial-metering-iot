@@ -8,9 +8,9 @@ class SmartObjectResource:
         self.type = object_type
         self.resource_data_listener = Event()
 
-    async def notify_update(self, type, updated_value):
+    async def notify_update(self, updated_value, **kwargs):
         if self.resource_data_listener:
-            self.resource_data_listener(type, updated_value)
+            self.resource_data_listener(updated_value, **kwargs)
         else:
             logging.info("No one is listening ...")
 
