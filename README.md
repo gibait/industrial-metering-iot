@@ -13,7 +13,7 @@ I messaggi di telemetria vengono serializzati in **JSON** e utilizzano il format
 
 Contestualmente all'emulazione degli SO agisce anche un **Policy Manager and Data Collector** che ha due funzioni principali:
 
-- Controllare che le forniture controllate dagli SO non raggiungano la soglia critica
+- Controllare che le forniture gestite dagli SO non raggiungano la soglia critica
 - Tenere traccia di tutti i dati ricevuti dai sensori per poterli analizzare successivamente
 
 Nel caso in venga raggiunta la soglia critica il Policy Manager si occuperà di inviare un messagio di controllo sul topic 
