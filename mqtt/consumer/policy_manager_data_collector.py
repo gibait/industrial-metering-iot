@@ -9,6 +9,7 @@ import paho.mqtt.client as mqtt
 
 from asyncio_mqtt import Client, MqttError
 from mqtt.conf.mqtt_conf_params import MqttConfigurationParams as mqttParams
+from mqtt.conf.credentials import Credentials as creds
 from mqtt.message.telemetry_message import TelemetryMessage
 from mqtt.message.control_message import ControlMessage
 from mqtt.resource.water_sensor_resource import WaterSensorResource
@@ -18,7 +19,7 @@ from mqtt.resource.electricity_sensor_resource import ElectricitySensorResource
 logging.basicConfig(level=logging.DEBUG,
                     format="%(asctime)s %(levelname)-8s %(message)s")
 
-DEMO_RUNTIME = 60 #s
+DEMO_TIME = 60 #s
 
 class PolicyManagerAndDataCollector:
     """
@@ -53,7 +54,9 @@ class PolicyManagerAndDataCollector:
             port=mqttParams.BROKER_PORT,
             clean_session=True,
             client_id=str(self.id),
-            keepalive=10
+            keepalive=10,
+            username=creds.POLICY_MANAGER_USER,
+            password=creds.POLICY_MANAGER_PW
         )
 
     async def on_connect(self):
@@ -262,8 +265,8 @@ class PolicyManagerAndDataCollector:
         :return:
         """
         try:
-            logging.info(f"Running simulation for {DEMO_RUNTIME} seconds")
-            await asyncio.sleep(DEMO_RUNTIME)
+            logging.info(f"Running simulation for {DEMO_TIME} seconds")
+            await asyncio.sleep(DEMO_TIME)
             for task in asyncio.all_tasks():
                 task.cancel()
             asyncio.get_event_loop().stop()
