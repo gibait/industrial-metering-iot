@@ -12,23 +12,22 @@ from mqtt.resource.electricity_sensor_resource import ElectricitySensorResource
 from mqtt.resource.generic_actuator_resource import GenericActuatorResource
 from mqtt.message.telemetry_message import TelemetryMessage
 from mqtt.message.control_message import ControlMessage
+from mqtt.message.device_info_message import DeviceInfoMessage
 from mqtt.conf.mqtt_conf_params import MqttConfigurationParams as mqttParams
 
 
 logging.basicConfig(level=logging.DEBUG,
                     format="%(asctime)s %(levelname)-8s %(message)s")
 
-DEMO_RUNTIME = 10
+DEMO_TIME = 70
 
 class MeteringSmartObject:
     """
-    Core of smart object emulation
-    Handle all three resources type
+    Core of the smart object emulation
+    Manage all three types of resources
     Subscribes to devices control topic
-    When receives an alert it switches actuator's device status
-    When data listener send a notify_update it publishes a telemetry message
-    Is started by an async start function
-    Is stopped after DEMO_RUNTIME seconds
+    On alert message it switches actuator's device status
+    On a received notify_update a telemetry message is published
     """
 
     def __init__(self, resources_dict, type, location, plant):
@@ -43,40 +42,58 @@ class MeteringSmartObject:
             )
         self.resources_dict = resources_dict
         self.type = type
+        self.software_version = 1.0
+        self.manufacturer = "ACME-INC"
         self.location = location
         self.plant = plant
         logging.info(f"{self.type} Metering Smart Object successfully created !")
 
-    async def subscribe_to_control_topic(self):
-        """
-        Subscribe to every device's control topic available
-        /metering/[location]/[plant]/[resource]/device/[unique_id]/(control)
-        """
-        try:
-            device_telemetry_topic = "{0}/{1}/{2}/{3}/{4}/{5}/{6}".format(
-                mqttParams.MQTT_DEFAULT_TOPIC,
-                self.location,
-                self.plant,
-                self.type,
-                mqttParams.DEVICE_TOPIC,
-                self.device_id,
-                mqttParams.CONTROL_TOPIC
-            )
-            await self.mqtt_client.subscribe(device_telemetry_topic)
-            logging.info("Subscribed to: " + device_telemetry_topic)
-        except Exception as e:
-            logging.error("Error subscribing to control topic!")
-            logging.error(e)
+        self.telemetry_topic = "{0}/{1}/{2}/{3}/{4}/{5}/{6}".format(
+            mqttParams.MQTT_DEFAULT_TOPIC,
+            self.location,
+            self.plant,
+            self.type,
+            mqttParams.DEVICE_TOPIC,
+            self.device_id,
+            mqttParams.TELEMETRY_TOPIC
+        )
+
+        self.control_topic = "{0}/{1}/{2}/{3}/{4}/{5}/{6}".format(
+            mqttParams.MQTT_DEFAULT_TOPIC,
+            self.location,
+            self.plant,
+            self.type,
+            mqttParams.DEVICE_TOPIC,
+            self.device_id,
+            mqttParams.CONTROL_TOPIC
+        )
+
+        self.info_topic = "{0}/{1}/{2}/{3}/{4}/{5}/{6}".format(
+            mqttParams.MQTT_DEFAULT_TOPIC,
+            self.location,
+            self.plant,
+            self.type,
+            mqttParams.DEVICE_TOPIC,
+            self.device_id,
+            mqttParams.INFO_TOPIC
+        )
 
     async def on_connect(self):
         """
         Connect to mqtt broker
+        Publish retained device info message
         """
         try:
             await self.mqtt_client.connect()
             logging.info(f"Device {self.device_id} successfully connected to MQTT Broker")
+            message = DeviceInfoMessage(self.device_id, self.software_version, self.manufacturer, self.location, self.plant)
+            # Publish retained device info message
+            await self.mqtt_client.publish(
+                self.info_topic,
+                message.to_json(),
+                retain=True)
         except Exception as e:
-            logging.error("Error! Could not establish connection")
+            logging.error("Error! Could not establish connection or publishing device info")
             logging.error(e)
 
     async def on_message(self):
@@ -112,56 +129,19 @@ class MeteringSmartObject:
             logging.error("Error! Cannot parse message")
             logging.error(e)
 
-    async def start(self):
+    async def subscribe_to_control_topic(self):
         """
-        Starts smart object emulation
-        :return:
-        """
-        try:
-            if self.device_id and len(self.resources_dict.keys()) > 0:
-                logging.info(f"Starting {self.type} Metering Emulator ...")
-                logging.info(f"Running simulation for {DEMO_RUNTIME} seconds")
-
-                await self.on_connect()
-                # Creating background task to receive messages
-                asyncio.get_event_loop().create_task(self.on_message(), name=str(self.device_id)+"on_message")
-                await self.subscribe_to_control_topic()
-                await self.register_to_available_resources()
-                # asyncio.get_event_loop().create_task(self.stop())
-
-        except Exception as e:
-            logging.error(f"Error starting {self.type} Metering Emulator! ")
-            logging.error(e)
-
-    async def stop(self):
-        """
-        Sleeps for simulation time and then stops tasks and loop
-        When done starts calls write to file function
-        :return:
+        Subscribe to device control topic with QoS level 2
+        /metering/[location]/[plant]/[resource]/device/[unique_id]/(control)
         """
         try:
-            await asyncio.sleep(DEMO_RUNTIME)
-            await self.deregister_to_resources()
-            for task in asyncio.all_tasks():
-                if task.get_name() == str(self.device_id)+"on_message" or task.get_name() == str(self.device_id)+"periodic":
-                    task.cancel()
-            logging.info("Stopping ...")
+            await self.mqtt_client.subscribe(self.control_topic, qos=2)
+            logging.info("Subscribed to: " + self.control_topic)
         except Exception as e:
-            logging.error("Error interrupting task")
+            logging.error("Error subscribing to control topic!")
             logging.error(e)
 
-    async def deregister_to_resources(self):
-        """
-        De-register from resources
-        :return:
-        """
-        try:
-            for resource in self.resources_dict:
-                self.resources_dict[resource].remove_data_listener(resource)
-                logging.info(f"Removed {resource} data listener for resource {self.device_id}")
-        except Exception as e:
-            logging.error("Error de-registering to resources! ")
-            logging.error(e)
+
 
     async def register_to_available_resources(self):
         """
@@ -190,6 +170,19 @@ class MeteringSmartObject:
             logging.error("Error Registering to resources! ")
             logging.error(e)
 
+    async def deregister_to_resources(self):
+        """
+        De-register from resources
+        :return:
+        """
+        try:
+            for resource in self.resources_dict:
+                self.resources_dict[resource].remove_data_listener(resource)
+                logging.info(f"Removed {resource} data listener for resource {self.device_id}")
+        except Exception as e:
+            logging.error("Error de-registering to resources! ")
+            logging.error(e)
+
     def on_data_changed(self, updated_value, **kwargs):
         """
         When a sensor/actuator changes value/state
@@ -206,13 +199,7 @@ class MeteringSmartObject:
             unit = kwargs.get('unit', None)
             message = TelemetryMessage(type=type, value=updated_value, unit=unit, name=self.device_id)
             asyncio.get_event_loop().create_task(self.publish_telemetry_data(
-                topic=f"{mqttParams.MQTT_DEFAULT_TOPIC}/"
-                      f"{self.location}/"
-                      f"{self.plant}/"
-                      f"{self.type}/"
-                      f"{mqttParams.DEVICE_TOPIC}/"
-                      f"{self.device_id}/"
-                      f"{mqttParams.TELEMETRY_TOPIC}",
+                topic=self.telemetry_topic,
                 message=message.build_senml_json_payload()
             ))
         except Exception as e:
@@ -226,7 +213,6 @@ class MeteringSmartObject:
         :param message:
         :return:
         """
-        # TODO add is connected check
         if topic and message:
             try:
                 await self.mqtt_client.publish(topic, message)
@@ -236,3 +222,54 @@ class MeteringSmartObject:
                 logging.error(e)
         else:
             logging.error("Error! msg != None or topic != None or mqttClient not connected")
+
+    async def clean_info_topic(self):
+        """
+        Publish an empty message on info topic to clean from retained messages
+        :return:
+        """
+        try:
+            await self.mqtt_client.publish(self.info_topic, None, retain=True)
+            logging.info(f"Cleaned {self.info_topic} from retain message")
+        except Exception as e:
+            logging.error("Error cleaning info topic from retain message")
+            logging.error(e)
+
+    async def start(self):
+        """
+        Starts smart object emulation
+        :return:
+        """
+        try:
+            if self.device_id and len(self.resources_dict.keys()) > 0:
+                logging.info(f"Starting {self.type} Metering Emulator ...")
+
+                await self.on_connect()
+                # Creating background task to receive messages
+                asyncio.get_event_loop().create_task(self.on_message(), name=str(self.device_id)+"on_message")
+                await self.subscribe_to_control_topic()
+                await self.register_to_available_resources()
+                asyncio.get_event_loop().create_task(self.stop())
+
+        except Exception as e:
+            logging.error(f"Error starting {self.type} Metering Emulator! ")
+            logging.error(e)
+
+    async def stop(self):
+        """
+        Sleeps for simulation time and then stops tasks and loop
+        When done starts calls write to file function
+        :return:
+        """
+        try:
+            await asyncio.sleep(DEMO_TIME)
+            await self.deregister_to_resources()
+            await self.clean_info_topic()
+            for task in asyncio.all_tasks():
+                if task.get_name() == str(self.device_id)+"on_message" or task.get_name() == str(self.device_id)+"periodic":
+                    task.cancel()
+            logging.info("Stopping ...")
+            asyncio.get_event_loop().stop()
+        except Exception as e:
+            logging.error("Error interrupting task")
+            logging.error(e)

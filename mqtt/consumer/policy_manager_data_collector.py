@@ -24,8 +24,8 @@ class PolicyManagerAndDataCollector:
     """
     Policy Manager and Data Collector
     Load threshold data from a file
-    On message saves new value or checks if above threshold
-    Sends control message in case
+    On message saves new value or checks if already present
+    If level is above threshold sends control message
     Schedule control message to resume operation
     Stops after DEMO_RUNTIME seconds
     Saves records to csv file
@@ -69,7 +69,7 @@ class PolicyManagerAndDataCollector:
     async def subscribe_to_telemetry_topic(self):
         """
         Subscribe to every telemetry topic available using mqtt wildcards
-        /metering/[location]/[plant]/[resource]/device/[unique_id]/(control)(telemetry)
+        /metering/[location]/[plant]/[resource]/device/[unique_id]/telemetry
         """
         try:
             # Subscribe to all telemetry topic available
@@ -84,8 +84,34 @@ class PolicyManagerAndDataCollector:
             logging.error("Error subscribing to topic!")
             logging.error(e)
 
+    async def subscribe_to_info_topic(self):
+        """
+        Subscribe to every info topic available using mqtt wildcards
+        /metering/[location]/[plant]/[resource]/device/[unique_id]/info
+        """
+        try:
+            device_info_topic = "{0}/+/+/+/{1}/+/{2}".format(
+                mqttParams.MQTT_DEFAULT_TOPIC,
+                mqttParams.DEVICE_TOPIC,
+                mqttParams.INFO_TOPIC
+            )
+            await self.mqtt_client.subscribe(device_info_topic)
+            logging.info("Subscribed to: " + device_info_topic)
+        except Exception as e:
+            logging.error("Error subscribing to topic!")
+            logging.error(e)
 
-    async def on_message(self):
+    async def on_info_message(self):
+        try:
+            async with self.mqtt_client.filtered_messages(
+                    f'{mqttParams.MQTT_DEFAULT_TOPIC}/+/+/+/{mqttParams.DEVICE_TOPIC}/+/{mqttParams.INFO_TOPIC}') as messages:
+                async for message in messages:
+                    logging.info(f"New device info received --> {message.payload.decode('utf-8')}")
+        except Exception as e:
+            logging.error("Error receiving info message")
+            logging.error(e)
+
+    async def on_telemetry_message(self):
         """
         Iterative core function of the program
         Compose TelemetryMessage and checks if allowed type
@@ -95,7 +121,8 @@ class PolicyManagerAndDataCollector:
         """
         try:
             # Iterate through messages
-            async with self.mqtt_client.filtered_messages('#') as messages:
+            async with self.mqtt_client.filtered_messages(
+                    f'{mqttParams.MQTT_DEFAULT_TOPIC}/+/+/+/{mqttParams.DEVICE_TOPIC}/+/{mqttParams.TELEMETRY_TOPIC}') as messages:
                 async for message in messages:
                     # Craft Telemetry message
                     telemetry_message:TelemetryMessage = self.parse_telemetry_message(message)
@@ -199,15 +226,14 @@ class PolicyManagerAndDataCollector:
 
     async def publish_control_message(self, topic:str, message:ControlMessage):
         """
-        Publish control message to control topic
+        Publish control message to control topic with QoS level 2
         :param topic:str
         :param message:ControlMessage
         :return None
         """
-        # TODO add is connected check
         if topic and message:
             try:
-                await self.mqtt_client.publish(topic, message.to_json())
+                await self.mqtt_client.publish(topic, message.to_json(), qos=2)
                 logging.info(f"Data {message.to_json()} successfully published to {topic}")
             except Exception as e:
                 logging.error("Error! Could not publish message")
@@ -218,8 +244,11 @@ class PolicyManagerAndDataCollector:
     async def start(self):
         try:
             await self.on_connect()
+            await self.subscribe_to_info_topic()
+            asyncio.get_event_loop().create_task(self.on_info_message())
+
             await self.subscribe_to_telemetry_topic()
-            asyncio.get_event_loop().create_task(self.on_message())
+            asyncio.get_event_loop().create_task(self.on_telemetry_message())
             asyncio.get_event_loop().create_task(self.stop())
             logging.info("Policy Manager and Data Collector started ...")
         except Exception as e:
@@ -228,8 +257,8 @@ class PolicyManagerAndDataCollector:
 
     async def stop(self):
         """
-        Sleeps for simulation time and then stops tasks and loop
-        When done starts calls write to file function
+        Sleeps for given time and then stops tasks and loop
+        Finally calls record's write to file method
         :return:
         """
         try:
