@@ -14,6 +14,8 @@ from mqtt.message.telemetry_message import TelemetryMessage
 from mqtt.message.control_message import ControlMessage
 from mqtt.message.device_info_message import DeviceInfoMessage
 from mqtt.conf.mqtt_conf_params import MqttConfigurationParams as mqttParams
+from mqtt.conf.credentials import Credentials as creds
+
 
 
 logging.basicConfig(level=logging.DEBUG,
@@ -38,7 +40,9 @@ class MeteringSmartObject:
             port=mqttParams.BROKER_PORT,
             clean_session=True,
             client_id=str(self.device_id),
-            keepalive=10
+            keepalive=10,
+            username=creds.SMART_OBJECT_USER,
+            password=creds.SMART_OBJECT_PW
             )
         self.resources_dict = resources_dict
         self.type = type
