@@ -1,11 +1,12 @@
 import uuid
 
 from mqtt.resource.smart_object_resource import SmartObjectResource
+from mqtt.conf.sensor_conf_values import GenericActuator as sensValues
 
 
 class GenericActuatorResource(SmartObjectResource):
 
-    RESOURCE_TYPE = "iot:actuator:generic"
+    RESOURCE_TYPE = sensValues.RESOURCE_TYPE
 
     def __init__(self):
         super().__init__(uuid.uuid4(), self.RESOURCE_TYPE)
