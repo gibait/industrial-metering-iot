@@ -32,3 +32,6 @@ class ElectricityConfValues:
     TASK_DELAY = 6
     UPDATE_DELAY = 5
     UNIT = "kWh"
+
+class GenericActuator:
+    RESOURCE_TYPE = "iot:actuator:generic"
